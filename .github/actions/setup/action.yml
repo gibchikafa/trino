@@ -111,6 +111,11 @@ runs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
+      - name: Create Maven settings
+        shell: bash
+        run: |
+          mkdir -p ~/.m2
+          echo "${{ secrets.MAVEN_SETTINGS_BASE64 }}" | base64 -d > ~/.m2/settings.xml
       - name: Configure Problem Matchers
         if: ${{ inputs.java-version != '' }}
         shell: bash

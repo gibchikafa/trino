@@ -1,0 +1,16 @@
+[
+    {
+        "name": "hopsworks/trino",
+        "version": "env:TAG_VERSION",
+        "excludeRegistries": [
+            "ecr_prod"
+        ],
+        "variables": [
+            "JDK_RELEASE",
+            "JDK_DOWNLOAD_LINK",
+            "ARCH"
+        ],
+        "extraDockerArgs": "--build-arg ARCH=\"${ARCH}\" --build-arg JDK_VERSION=\"${JDK_RELEASE}\" --build-arg JDK_DOWNLOAD_LINK=\"${JDK_DOWNLOAD_LINK}\"",
+        "dockerFile": "core/docker/Dockerfile"
+    }
+]
