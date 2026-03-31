@@ -59,10 +59,16 @@ public class QueryAccessRule
 
     public Optional<Set<AccessMode>> match(String user, Set<String> roles, Set<String> groups, Optional<String> queryOwner)
     {
-        if (userRegex.map(regex -> regex.matcher(user).matches()).orElse(true) &&
-                roleRegex.map(regex -> roles.stream().anyMatch(role -> regex.matcher(role).matches())).orElse(true) &&
-                groupRegex.map(regex -> groups.stream().anyMatch(role -> regex.matcher(role).matches())).orElse(true) &&
-                ((queryOwner.isEmpty() && queryOwnerRegex.isEmpty()) || (queryOwner.isPresent() && queryOwnerRegex.map(regex -> regex.matcher(queryOwner.get()).matches()).orElse(true)))) {
+//        if (userRegex.map(regex -> regex.matcher(user).matches()).orElse(true) &&
+//                roleRegex.map(regex -> roles.stream().anyMatch(role -> regex.matcher(role).matches())).orElse(true) &&
+//                groupRegex.map(regex -> groups.stream().anyMatch(role -> regex.matcher(role).matches())).orElse(true) &&
+//                ((queryOwner.isEmpty() && queryOwnerRegex.isEmpty()) || (queryOwner.isPresent() && queryOwnerRegex.map(regex -> regex.matcher(queryOwner.get()).matches()).orElse(true)))) {
+//            return Optional.of(allow);
+//        }
+
+        ReplacePatternMatcher replacePatternMatcher = new ReplacePatternMatcher(userRegex, roleRegex, groupRegex, user, roles, groups);
+
+        if (replacePatternMatcher.matchQueryAccessRule(queryOwnerRegex, queryOwner)) {
             return Optional.of(allow);
         }
         return Optional.empty();

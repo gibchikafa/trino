@@ -85,11 +85,15 @@ public class TableAccessControlRule
 
     public boolean matches(String user, Set<String> roles, Set<String> groups, SchemaTableName table)
     {
-        return userRegex.map(regex -> regex.matcher(user).matches()).orElse(true) &&
-                roleRegex.map(regex -> roles.stream().anyMatch(role -> regex.matcher(role).matches())).orElse(true) &&
-                groupRegex.map(regex -> groups.stream().anyMatch(group -> regex.matcher(group).matches())).orElse(true) &&
-                schemaRegex.map(regex -> regex.matcher(table.getSchemaName()).matches()).orElse(true) &&
-                tableRegex.map(regex -> regex.matcher(table.getTableName()).matches()).orElse(true);
+//        return userRegex.map(regex -> regex.matcher(user).matches()).orElse(true) &&
+//                roleRegex.map(regex -> roles.stream().anyMatch(role -> regex.matcher(role).matches())).orElse(true) &&
+//                groupRegex.map(regex -> groups.stream().anyMatch(group -> regex.matcher(group).matches())).orElse(true) &&
+//                schemaRegex.map(regex -> regex.matcher(table.getSchemaName()).matches()).orElse(true) &&
+//                tableRegex.map(regex -> regex.matcher(table.getTableName()).matches()).orElse(true);
+
+        ReplacePatternMatcher replacePatternMatcher = new ReplacePatternMatcher(userRegex, roleRegex, groupRegex, user, roles, groups);
+
+        return replacePatternMatcher.matchSchemaAndTable(schemaRegex, table.getSchemaName(), tableRegex, table.getTableName());
     }
 
     public Set<String> getRestrictedColumns()

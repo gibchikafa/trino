@@ -60,10 +60,16 @@ public class CatalogAccessControlRule
 
     public Optional<AccessMode> match(String user, Set<String> roles, Set<String> groups, String catalog)
     {
-        if (userRegex.map(regex -> regex.matcher(user).matches()).orElse(true) &&
-                roleRegex.map(regex -> roles.stream().anyMatch(role -> regex.matcher(role).matches())).orElse(true) &&
-                groupRegex.map(regex -> groups.stream().anyMatch(group -> regex.matcher(group).matches())).orElse(true) &&
-                catalogRegex.map(regex -> regex.matcher(catalog).matches()).orElse(true)) {
+//        if (userRegex.map(regex -> regex.matcher(user).matches()).orElse(true) &&
+//                roleRegex.map(regex -> roles.stream().anyMatch(role -> regex.matcher(role).matches())).orElse(true) &&
+//                groupRegex.map(regex -> groups.stream().anyMatch(group -> regex.matcher(group).matches())).orElse(true) &&
+//                catalogRegex.map(regex -> regex.matcher(catalog).matches()).orElse(true)) {
+//            return Optional.of(accessMode);
+//        }
+
+        ReplacePatternMatcher replacePatternMatcher = new ReplacePatternMatcher(userRegex, roleRegex, groupRegex, user, roles, groups);
+
+        if (replacePatternMatcher.matchCatalog(catalogRegex, catalog)) {
             return Optional.of(accessMode);
         }
         return Optional.empty();
