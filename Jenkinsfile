@@ -12,22 +12,20 @@ node("local") {
     env.TRINO_VERSION = ''
     env.TAG_PREFIX = 'trino'
     env.SERVER_ARTIFACT = 'trino-server'
-    env.JDKS_PATH = 'core/jdk'
     env.SKIP_TESTS = 'false'
     env.WORK_DIR = 'core/docker'
 
     stage('Init') {
-        // use scripted pipeline style
-        def current = sh(script: "cat \"${env.JDKS_PATH}/current\" | tr -d '\\n\\r'", returnStdout: true).trim()
-        env.JDK_RELEASE = current
-
-        def jdk_download_link = sh(script: "grep '^distributionUrl=' \"${env.JDKS_PATH}/${env.JDK_RELEASE}/${env.ARCH}\" | cut -d'=' -f2-", returnStdout: true).trim()
-
-        env.JDK_DOWNLOAD_LINK = jdk_download_link
-
         env.TRINO_VERSION = sh(script: './mvnw -f pom.xml --quiet help:evaluate -Dexpression=project.version -DforceStdout', returnStdout: true).trim()
 
+        // JDK version is now defined as <temurin.release> in pom.xml
+        env.JDK_RELEASE = sh(script: './mvnw -f pom.xml --quiet help:evaluate -Dexpression=temurin.release -DforceStdout', returnStdout: true).trim()
+
+        // Construct the Adoptium download URL from the release name and architecture
+        env.JDK_DOWNLOAD_LINK = "https://api.adoptium.net/v3/binary/version/${env.JDK_RELEASE}/linux/x64/jdk/hotspot/normal/eclipse?project=jdk"
+
         echo "TRINO_VERSION=${env.TRINO_VERSION}"
+        echo "JDK_RELEASE=${env.JDK_RELEASE}"
         echo "JDK_DOWNLOAD_LINK=${env.JDK_DOWNLOAD_LINK}"
     }
 
