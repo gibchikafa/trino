@@ -148,6 +148,12 @@
         </dependency>
 
         <dependency>
+            <groupId>io.hops.hadoop</groupId>
+            <artifactId>hadoop-apache</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
             <groupId>io.trino</groupId>
             <artifactId>trino-base-jdbc</artifactId>
             <scope>test</scope>
