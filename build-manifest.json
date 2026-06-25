@@ -1,6 +1,6 @@
 [
     {
-        "name": "dev/ermias/hopsworks/trino",
+        "name": "hopsworks/trino",
         "version": "env:TAG_VERSION",
         "excludeRegistries": [
             "ecr_prod"
