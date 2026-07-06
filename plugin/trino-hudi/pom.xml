@@ -16,7 +16,7 @@
 
     <properties>
         <air.compiler.fail-warnings>true</air.compiler.fail-warnings>
-        <dep.hudi.version>1.1.1</dep.hudi.version>
+        <dep.hudi.version>1.2.0</dep.hudi.version>
     </properties>
 
     <dependencies>
@@ -118,7 +118,7 @@
         </dependency>
 
         <dependency>
-            <groupId>org.apache.hudi</groupId>
+            <groupId>io.hops.hudi</groupId>
             <artifactId>hudi-common</artifactId>
             <version>${dep.hudi.version}</version>
             <exclusions>
@@ -130,7 +130,7 @@
         </dependency>
 
         <dependency>
-            <groupId>org.apache.hudi</groupId>
+            <groupId>io.hops.hudi</groupId>
             <artifactId>hudi-io</artifactId>
             <version>${dep.hudi.version}</version>
         </dependency>
@@ -318,7 +318,7 @@
         </dependency>
 
         <dependency>
-            <groupId>org.apache.hudi</groupId>
+            <groupId>io.hops.hudi</groupId>
             <artifactId>hudi-client-common</artifactId>
             <version>${dep.hudi.version}</version>
             <scope>test</scope>
@@ -331,7 +331,7 @@
         </dependency>
 
         <dependency>
-            <groupId>org.apache.hudi</groupId>
+            <groupId>io.hops.hudi</groupId>
             <artifactId>hudi-hadoop-common</artifactId>
             <version>${dep.hudi.version}</version>
             <scope>test</scope>
@@ -344,7 +344,7 @@
         </dependency>
 
         <dependency>
-            <groupId>org.apache.hudi</groupId>
+            <groupId>io.hops.hudi</groupId>
             <artifactId>hudi-io</artifactId>
             <version>${dep.hudi.version}</version>
             <classifier>tests</classifier>
@@ -358,13 +358,13 @@
         </dependency>
 
         <dependency>
-            <groupId>org.apache.hudi</groupId>
+            <groupId>io.hops.hudi</groupId>
             <artifactId>hudi-java-client</artifactId>
             <version>${dep.hudi.version}</version>
             <scope>test</scope>
             <exclusions>
                 <exclusion>
-                    <groupId>org.apache.hudi</groupId>
+                    <groupId>io.hops.hudi</groupId>
                     <artifactId>*</artifactId>
                 </exclusion>
             </exclusions>
@@ -422,7 +422,7 @@
                 <artifactId>duplicate-finder-maven-plugin</artifactId>
                 <configuration>
                     <ignoredResourcePatterns>
-                        <!-- org.apache.hudi:hudi-client-common and org.apache.hudi:hudi-java-client log4j.properties duplicates -->
+                        <!-- io.hops.hudi:hudi-client-common and io.hops.hudi:hudi-java-client log4j.properties duplicates -->
                         <ignoredResourcePattern>log4j.properties</ignoredResourcePattern>
                         <ignoredResourcePattern>log4j-surefire.properties</ignoredResourcePattern>
                     </ignoredResourcePatterns>
