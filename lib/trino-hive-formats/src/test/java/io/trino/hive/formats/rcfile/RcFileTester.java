@@ -43,6 +43,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator.RecordWriter;
 import org.apache.hadoop.hive.ql.io.RCFileInputFormat;
 import org.apache.hadoop.hive.ql.io.RCFileOutputFormat;
+import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.Deserializer;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.Serializer;
@@ -145,7 +146,7 @@ public class RcFileTester
                     Properties tableProperties = new Properties();
                     tableProperties.setProperty("columns", "test");
                     tableProperties.setProperty("columns.types", "string");
-                    columnarSerDe.initialize(new JobConf(false), tableProperties);
+                    columnarSerDe.initialize(new JobConf(false), tableProperties, null);
                     return columnarSerDe;
                 }
                 catch (SerDeException e) {
@@ -522,7 +523,7 @@ public class RcFileTester
         else {
             deserializer = new ColumnarSerDe();
         }
-        deserializer.initialize(configuration, schema);
+        ((AbstractSerDe) deserializer).initialize(configuration, schema, null);
         configuration.set(SERIALIZATION_LIB, deserializer.getClass().getName());
 
         InputFormat<K, V> inputFormat = new RCFileInputFormat<>();
@@ -564,7 +565,7 @@ public class RcFileTester
         Properties tableProperties = new Properties();
         tableProperties.setProperty("columns", "test");
         tableProperties.setProperty("columns.types", objectInspector.getTypeName());
-        serializer.initialize(new JobConf(false), tableProperties);
+        ((AbstractSerDe) serializer).initialize(new JobConf(false), tableProperties, null);
 
         while (values.hasNext()) {
             Object value = values.next();

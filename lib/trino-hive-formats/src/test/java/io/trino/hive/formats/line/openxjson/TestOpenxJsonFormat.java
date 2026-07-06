@@ -1597,7 +1597,7 @@ public class TestOpenxJsonFormat
             Properties schema = new Properties();
             schema.putAll(createOpenXJsonSerDeProperties(columns, options));
 
-            Deserializer deserializer = new JsonSerDe();
+            JsonSerDe deserializer = new JsonSerDe();
             deserializer.initialize(configuration, schema);
             configuration.set(SERIALIZATION_LIB, deserializer.getClass().getName());
 

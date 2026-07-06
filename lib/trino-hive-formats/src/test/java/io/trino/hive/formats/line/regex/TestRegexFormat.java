@@ -29,7 +29,6 @@ import io.trino.spi.type.TimestampType;
 import io.trino.spi.type.Type;
 import io.trino.spi.type.VarcharType;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.serde2.Deserializer;
 import org.apache.hadoop.hive.serde2.RegexSerDe;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -687,8 +686,8 @@ public class TestRegexFormat
                 .collect(joining(",")));
 
         try {
-            Deserializer deserializer = new RegexSerDe();
-            deserializer.initialize(configuration, schema);
+            RegexSerDe deserializer = new RegexSerDe();
+            deserializer.initialize(configuration, schema, null);
             Object rowData = deserializer.deserialize(new Text(line));
 
             StructObjectInspector rowInspector = (StructObjectInspector) deserializer.getObjectInspector();

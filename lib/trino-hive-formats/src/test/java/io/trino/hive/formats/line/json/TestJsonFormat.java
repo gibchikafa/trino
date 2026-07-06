@@ -39,6 +39,7 @@ import io.trino.spi.type.Type;
 import io.trino.spi.type.TypeOperators;
 import io.trino.spi.type.VarcharType;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.Deserializer;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.SerDeUtils;
@@ -1045,7 +1046,7 @@ public class TestJsonFormat
         else {
             deserializer = new org.apache.hadoop.hive.serde2.JsonSerDe();
         }
-        deserializer.initialize(configuration, schema);
+        ((AbstractSerDe) deserializer).initialize(configuration, schema, null);
         configuration.set(SERIALIZATION_LIB, deserializer.getClass().getName());
         return deserializer;
     }

@@ -63,6 +63,7 @@ import org.apache.hadoop.hive.ql.io.orc.OrcFile.WriterOptions;
 import org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat;
 import org.apache.hadoop.hive.ql.io.orc.OrcSerde;
 import org.apache.hadoop.hive.ql.io.orc.Writer;
+import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.Serializer;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.SettableStructObjectInspector;
@@ -668,7 +669,7 @@ public class TestOrcPageSourceMemoryTracking
                         .map(TestColumn::getType)
                         .collect(Collectors.joining(",")));
 
-        serializer.initialize(CONFIGURATION, tableProperties);
+        ((AbstractSerDe) serializer).initialize(CONFIGURATION, tableProperties, null);
         RecordWriter recordWriter = createRecordWriter(new Path(filePath), CONFIGURATION);
 
         try {

@@ -89,6 +89,7 @@ import org.apache.hadoop.hive.common.type.HiveVarchar;
 import org.apache.hadoop.hive.common.type.Timestamp;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.io.HiveOutputFormat;
+import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.Serializer;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -201,7 +202,7 @@ import static java.util.Arrays.fill;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 import static org.apache.hadoop.hive.common.type.HiveVarchar.MAX_VARCHAR_LENGTH;
-import static org.apache.hadoop.hive.conf.HiveConf.ConfVars.COMPRESSRESULT;
+import static org.apache.hadoop.hive.conf.HiveConf.ConfVars.COMPRESS_RESULT;
 import static org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.FILE_INPUT_FORMAT;
 import static org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.getStandardListObjectInspector;
 import static org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.getStandardMapObjectInspector;
@@ -1553,7 +1554,7 @@ public final class TestHiveFileFormats
         Properties tableProperties = new Properties();
         tableProperties.setProperty(LIST_COLUMNS, testColumns.stream().map(TestColumn::name).collect(Collectors.joining(",")));
         tableProperties.setProperty(LIST_COLUMN_TYPES, testColumns.stream().map(testColumn -> toHiveType(testColumn.type()).toString()).collect(Collectors.joining(",")));
-        serializer.initialize(new Configuration(false), tableProperties);
+        ((AbstractSerDe) serializer).initialize(new Configuration(false), tableProperties, null);
 
         JobConf jobConf = new JobConf(false);
         configureCompression(jobConf, compressionCodec);
@@ -1569,7 +1570,7 @@ public final class TestHiveFileFormats
                     tableProperties,
                     () -> {});
 
-            serializer.initialize(new Configuration(false), tableProperties);
+            ((AbstractSerDe) serializer).initialize(new Configuration(false), tableProperties, null);
 
             SettableStructObjectInspector objectInspector = getStandardStructObjectInspector(
                     testColumns.stream()
@@ -1608,7 +1609,7 @@ public final class TestHiveFileFormats
     private static void configureCompression(Configuration config, HiveCompressionCodec compressionCodec)
     {
         boolean compression = compressionCodec != HiveCompressionCodec.NONE;
-        config.setBoolean(COMPRESSRESULT.varname, compression);
+        config.setBoolean(COMPRESS_RESULT.varname, compression);
         config.setBoolean("mapred.output.compress", compression);
         config.setBoolean(FileOutputFormat.COMPRESS, compression);
 

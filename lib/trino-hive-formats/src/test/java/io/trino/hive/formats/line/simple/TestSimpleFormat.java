@@ -222,7 +222,7 @@ public class TestSimpleFormat
                 () -> {
                     Properties schema = new Properties();
                     schema.putAll(createLazySimpleSerDeProperties(columns, options));
-                    new LazySimpleSerDe().initialize(new Configuration(false), schema);
+                    new LazySimpleSerDe().initialize(new Configuration(false), schema, null);
                 })
                 .isInstanceOf(SerDeException.class)
                 .hasMessageContaining("nesting");
@@ -1463,7 +1463,7 @@ public class TestSimpleFormat
 
         Configuration configuration = new Configuration(false);
         LazySimpleSerDe deserializer = new LazySimpleSerDe();
-        deserializer.initialize(configuration, schema);
+        deserializer.initialize(configuration, schema, null);
         return deserializer;
     }
 

@@ -292,7 +292,7 @@ public class TestCsvFormat
         schema.putAll(createCsvProperties(separatorChar, quoteChar, escapeChar));
 
         OpenCSVSerde deserializer = new OpenCSVSerde();
-        deserializer.initialize(configuration, schema);
+        deserializer.initialize(configuration, schema, null);
         configuration.set(SERIALIZATION_LIB, deserializer.getClass().getName());
         return deserializer;
     }
