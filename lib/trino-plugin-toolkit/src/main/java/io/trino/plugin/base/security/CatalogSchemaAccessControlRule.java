@@ -51,7 +51,16 @@ public class CatalogSchemaAccessControlRule
 
     public Optional<Boolean> match(String user, Set<String> roles, Set<String> groups, CatalogSchemaName schema)
     {
-        if (!catalogRegex.map(regex -> regex.matcher(schema.getCatalogName()).matches()).orElse(true)) {
+        // Substitute capturing groups from the user/role/group match (e.g. $1) into the catalog regex,
+        // consistent with how the schema regex is handled in SchemaAccessControlRule.match().
+        ReplacePatternMatcher replacePatternMatcher = new ReplacePatternMatcher(
+                schemaAccessControlRule.getUserRegex(),
+                schemaAccessControlRule.getRoleRegex(),
+                schemaAccessControlRule.getGroupRegex(),
+                user,
+                roles,
+                groups);
+        if (!replacePatternMatcher.matchCatalog(catalogRegex, schema.getCatalogName())) {
             return Optional.empty();
         }
         return schemaAccessControlRule.match(user, roles, groups, schema.getSchemaName());
