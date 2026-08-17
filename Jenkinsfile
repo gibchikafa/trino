@@ -14,12 +14,18 @@ node("local") {
     env.SERVER_ARTIFACT = 'trino-server'
     env.SKIP_TESTS = 'false'
     env.WORK_DIR = 'core/docker'
+    // Build against a private, per-workspace Maven repo (wiped every build) so
+    // stale or locally-installed jars in the node's ~/.m2 can never leak in
+    env.MAVEN_LOCAL_REPO = "${env.WORKSPACE}/.m2/repository"
 
     stage('Init') {
-        env.TRINO_VERSION = sh(script: './mvnw -f pom.xml --quiet help:evaluate -Dexpression=project.version -DforceStdout', returnStdout: true).trim()
+        // start every build from a clean local Maven repo
+        sh "rm -rf \"${env.MAVEN_LOCAL_REPO}\""
+
+        env.TRINO_VERSION = sh(script: "./mvnw -f pom.xml --quiet -Dmaven.repo.local=\"${env.MAVEN_LOCAL_REPO}\" help:evaluate -Dexpression=project.version -DforceStdout", returnStdout: true).trim()
 
         // JDK version is now defined as <temurin.release> in pom.xml
-        env.JDK_RELEASE = sh(script: './mvnw -f pom.xml --quiet help:evaluate -Dexpression=temurin.release -DforceStdout', returnStdout: true).trim()
+        env.JDK_RELEASE = sh(script: "./mvnw -f pom.xml --quiet -Dmaven.repo.local=\"${env.MAVEN_LOCAL_REPO}\" help:evaluate -Dexpression=temurin.release -DforceStdout", returnStdout: true).trim()
 
         // Construct the Adoptium download URL from the release name and architecture
         env.JDK_DOWNLOAD_LINK = "https://api.adoptium.net/v3/binary/version/${env.JDK_RELEASE}/linux/x64/jdk/hotspot/normal/eclipse?project=jdk"
@@ -39,7 +45,7 @@ node("local") {
         sh "tar -xzf jdk24.tar.gz -C ${env.WORKSPACE}/jdk --strip-components=1"
         sh "rm jdk24.tar.gz"
 
-        sh "JAVA_HOME=${env.WORKSPACE}/jdk ${env.WORKSPACE}/mvnw clean package -DskipTests"
+        sh "JAVA_HOME=${env.WORKSPACE}/jdk ${env.WORKSPACE}/mvnw clean package -DskipTests -Dmaven.repo.local=\"${env.MAVEN_LOCAL_REPO}\""
 
         // Archive artifacts
         archiveArtifacts artifacts: "core/${env.SERVER_ARTIFACT}/target/${env.SERVER_ARTIFACT}-${env.TRINO_VERSION}.tar.gz", fingerprint: true, allowEmptyArchive: true
