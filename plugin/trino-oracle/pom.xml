@@ -119,6 +119,19 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!--
+            Oracle PKI provider. Required to read an auto-login (SSO) wallet: cwallet.sso is opened
+            through the OraclePKI security provider, and without this jar an SSO wallet fails with
+            ORA-17957 through Trino, or NoSuchAlgorithmException from the standalone driver.
+            The version comes from the com.oracle.database.jdbc:ojdbc11-production BOM imported in the
+            root pom, so it always matches the ojdbc11 in use.
+        -->
+        <dependency>
+            <groupId>com.oracle.database.security</groupId>
+            <artifactId>oraclepki</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
         <dependency>
             <groupId>dev.failsafe</groupId>
             <artifactId>failsafe</artifactId>
