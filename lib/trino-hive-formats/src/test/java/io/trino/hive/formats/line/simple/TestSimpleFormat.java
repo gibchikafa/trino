@@ -492,7 +492,12 @@ public class TestSimpleFormat
         for (int i = 0; i < allBytes.length; i++) {
             allBytes[i] = (byte) (Byte.MIN_VALUE + i);
         }
-        assertVarbinary(Slices.wrappedBuffer(allBytes));
+        // Hive 4 no longer decodes the URL safe base64 alphabet (-_); it falls back to treating the
+        // input as raw binary. Only the standard alphabet is still understood by both engines.
+        assertValue(VARBINARY, Base64.getEncoder().encodeToString(allBytes), new SqlVarbinary(allBytes), DEFAULT_SIMPLE_OPTIONS, false);
+        String urlSafeAllBytes = Base64.getUrlEncoder().encodeToString(allBytes);
+        assertValueHive(VARBINARY, urlSafeAllBytes, new SqlVarbinary(urlSafeAllBytes.getBytes(UTF_8)), DEFAULT_SIMPLE_OPTIONS);
+        assertValueTrino(VARBINARY, urlSafeAllBytes, new SqlVarbinary(allBytes), DEFAULT_SIMPLE_OPTIONS, false);
 
         // Hive allows raw non-base64 binary, but only if the data contains a non-base64 character
         assertValue(VARBINARY, "$value", new SqlVarbinary("$value".getBytes(UTF_8)));
@@ -509,8 +514,10 @@ public class TestSimpleFormat
     {
         // Hive decoder allows both STANDARD (+/) and URL_SAFE (-_) base64
         byte[] byteArray = value.getBytes();
-        assertValue(VARBINARY, Base64.getEncoder().encodeToString(byteArray), new SqlVarbinary(byteArray));
-        assertValue(VARBINARY, Base64.getUrlEncoder().encodeToString(byteArray), new SqlVarbinary(byteArray));
+        // Hive 4 writes base64 without the '=' padding that Trino emits, so the two engines no longer
+        // produce byte identical lines for varbinary. Each still reads back what the other writes.
+        assertValue(VARBINARY, Base64.getEncoder().encodeToString(byteArray), new SqlVarbinary(byteArray), DEFAULT_SIMPLE_OPTIONS, false);
+        assertValue(VARBINARY, Base64.getUrlEncoder().encodeToString(byteArray), new SqlVarbinary(byteArray), DEFAULT_SIMPLE_OPTIONS, false);
     }
 
     @Test
@@ -1001,16 +1008,23 @@ public class TestSimpleFormat
         assertDate("1986-01-01 anything is allowed here", LocalDate.of(1986, 1, 1).toEpochDay());
 
         assertDate("1986-01-01", LocalDate.of(1986, 1, 1).toEpochDay());
-        assertDate("1986-01-33", LocalDate.of(1986, 2, 2).toEpochDay());
+        // Hive 3 rolled an out of range day over into the next month, Hive 4 rejects the value and
+        // returns null instead. Trino still rolls it over.
+        assertValueHive(DATE, "1986-01-33", null, DEFAULT_SIMPLE_OPTIONS);
+        assertValueTrino(DATE, "1986-01-33", new SqlDate(toIntExact(LocalDate.of(1986, 2, 2).toEpochDay())), DEFAULT_SIMPLE_OPTIONS, true);
 
-        assertDate("5881580-07-11", Integer.MAX_VALUE);
-        assertDate("-5877641-06-23", Integer.MIN_VALUE);
+        // Hive 4 rejects dates at the extremes of the int range and returns null, where Hive 3 parsed
+        // them (and silently truncated in Date.toEpochDay just past the boundary). Trino is unchanged.
+        assertValueHive(DATE, "5881580-07-11", null, DEFAULT_SIMPLE_OPTIONS);
+        assertValueTrino(DATE, "5881580-07-11", new SqlDate(Integer.MAX_VALUE), DEFAULT_SIMPLE_OPTIONS, false);
+        assertValueHive(DATE, "-5877641-06-23", null, DEFAULT_SIMPLE_OPTIONS);
+        assertValueTrino(DATE, "-5877641-06-23", new SqlDate(Integer.MIN_VALUE), DEFAULT_SIMPLE_OPTIONS, false);
 
-        // Hive does not enforce size bounds and truncates the results in Date.toEpochDay
+        // Just past the boundary Hive 3 truncated in Date.toEpochDay; Hive 4 returns null instead.
         // For Trino we fail as this behavior is error-prone
-        assertValueHive(DATE, "5881580-07-12", new SqlDate(Integer.MIN_VALUE), DEFAULT_SIMPLE_OPTIONS);
+        assertValueHive(DATE, "5881580-07-12", null, DEFAULT_SIMPLE_OPTIONS);
         assertValueFailsTrino(DATE, "5881580-07-12");
-        assertValueHive(DATE, "-5877641-06-22", new SqlDate(Integer.MAX_VALUE), DEFAULT_SIMPLE_OPTIONS);
+        assertValueHive(DATE, "-5877641-06-22", null, DEFAULT_SIMPLE_OPTIONS);
         assertValueFailsTrino(DATE, "-5877641-06-22");
 
         assertValue(DATE, "1", null);
@@ -1099,11 +1113,16 @@ public class TestSimpleFormat
                 "05/10/2020 12.34.56.123",
                 LocalDateTime.of(2020, 5, 10, 12, 34, 56, 123_000_000),
                 "MM/dd/yyyy HH.mm.ss.SSS");
-        assertTimestamp(
+        // Hive 4 requires a two digit hour for the HH pattern and returns null for a single digit one,
+        // where Hive 3 accepted it. Trino still accepts it.
+        TextEncodingOptions singleDigitHour = TextEncodingOptions.builder().timestampFormats("MM/dd/yyyy HH").build();
+        assertValueHive(TIMESTAMP_NANOS, "05/10/2020 7", null, singleDigitHour);
+        assertValueTrino(
                 TIMESTAMP_NANOS,
                 "05/10/2020 7",
-                LocalDateTime.of(2020, 5, 10, 7, 0, 0, 0),
-                "MM/dd/yyyy HH");
+                toSqlTimestamp(TIMESTAMP_NANOS, LocalDateTime.of(2020, 5, 10, 7, 0, 0, 0)),
+                singleDigitHour,
+                false);
         assertTimestamp(
                 TIMESTAMP_NANOS,
                 "1589114096123.777",
@@ -1130,11 +1149,15 @@ public class TestSimpleFormat
                 "1/1/-10",
                 null,
                 "MM/dd/yyyy");
-        assertTimestamp(
+        // Hive 4 rejects a negative year, Trino still parses it
+        TextEncodingOptions negativeYear = TextEncodingOptions.builder().timestampFormats("MM/dd/yyyy").build();
+        assertValueHive(TIMESTAMP_NANOS, "01/1/-10", null, negativeYear);
+        assertValueTrino(
                 TIMESTAMP_NANOS,
                 "01/1/-10",
-                LocalDateTime.of(-10, 1, 1, 0, 0),
-                "MM/dd/yyyy");
+                toSqlTimestamp(TIMESTAMP_NANOS, LocalDateTime.of(-10, 1, 1, 0, 0)),
+                negativeYear,
+                false);
 
         // Default Hive timestamp and ISO 8601 always supported in both normal values and map keys
         assertValue(

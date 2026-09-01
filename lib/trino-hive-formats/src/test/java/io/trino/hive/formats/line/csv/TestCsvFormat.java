@@ -88,26 +88,35 @@ public class TestCsvFormat
         assertLine(true, "\"a\"\"a\",b,c", Arrays.asList("a\"a", "b", "c"));
         // Separator character does not have to be escaped in a quoted value
         assertLine(true, "\"a,a\",b,c", Arrays.asList("a,a", "b", "c"));
-        // Unterminated quoted value is just ignored
-        assertLine(true, "\"a,b,c", Arrays.asList(null, null, null));
-        assertLine(true, "a,b,\"c", Arrays.asList("a", "b", null));
+        // Unterminated quoted value is just ignored by Trino, but rejected outright by Hive 4
+        assertLineRejectedByHive("\"a,b,c", Arrays.asList(null, null, null));
+        assertLineRejectedByHive("a,b,\"c", Arrays.asList("a", "b", null));
 
-        // extra data past end of line is ignored
-        assertLine(true, "a,b,c,anything can go here , \" \\", Arrays.asList("a", "b", "c"));
+        // extra data past end of line is ignored by Trino; the trailing quote makes Hive 4 reject the line
+        assertLineRejectedByHive("a,b,c,anything can go here , \" \\", Arrays.asList("a", "b", "c"));
 
         // Escape is allowed for unquoted data
         assertLine(false, "a\\\"a,b\\\\b,c", Arrays.asList("a\"a", "b\\b", "c"));
         // but separator character can not be escaped without of a quote
         // NOTE escape character is dropped here
-        assertLine(true, "a\\,a,b,c", Arrays.asList("a", "a", "b"));
+        // Trino and Hive 4 genuinely disagree on this input: Hive 4 ships a newer opencsv that honours
+        // the escape character in an unquoted field and reads a single "a,a" field, while Trino keeps
+        // the Hive 3 behaviour of dropping the escape and splitting on the separator. Writing is
+        // unaffected, so the byte for byte comparison below still holds.
+        assertTrinoLine("a\\,a,b,c", Arrays.asList("a", "a", "b"), Optional.empty(), Optional.empty(), Optional.empty());
+        assertHiveLine("a\\,a,b,c", Arrays.asList("a,a", "b", "c"), Optional.empty(), Optional.empty(), Optional.empty());
+        assertTrinoLine("a~_a_b_c", Arrays.asList("a", "a", "b"), Optional.of('_'), Optional.of('|'), Optional.of('~'));
+        assertHiveLine("a~_a_b_c", Arrays.asList("a_a", "b", "c"), Optional.of('_'), Optional.of('|'), Optional.of('~'));
+        assertTrinoHiveByteForByte(true, Arrays.asList("a", "a", "b"), Optional.empty(), Optional.empty(), Optional.empty());
+        assertTrinoHiveByteForByte(true, Arrays.asList("a", "a", "b"), Optional.of('_'), Optional.of('|'), Optional.of('~'));
 
         // Quote is allowed in unquoted field (after first two characters)
         assertLine(true, "12x\"a\"x,x\"b\"x,x\"c\"x", Arrays.asList("12x\"a\"x", "x\"b\"x", "x\"c\"x"));
         // but close quote is ignored if it appears immediately before a separator
         assertLine(true, "12x\"a\",x\"b\",x\"c\"", Arrays.asList("12x\"a", "x\"b", "x\"c"));
         // but quoting rules are applied, so strings must match
-        // NOTE: last field is ignored ue to unterminated quoted string
-        assertLine(true, "12x\"ax,x\"bx,x\"cx", Arrays.asList("12x\"ax,x\"bx", null, null));
+        // NOTE: last field is ignored ue to unterminated quoted string, and Hive 4 rejects the line
+        assertLineRejectedByHive("12x\"ax,x\"bx,x\"cx", Arrays.asList("12x\"ax,x\"bx", null, null));
 
         // whitespace before a quoted it normally ignored, except for the first two characters at the beginning of the line
         assertLine(true, " \"a\",  \"b\",  \"c\"", Arrays.asList(" a", "b", "c"));
@@ -120,11 +129,15 @@ public class TestCsvFormat
 
         // If quote character is `\0` then quoting is simply disabled, even if this would cause output that does not round trip
         assertTrinoHiveByteForByte(true, Arrays.asList("foo", "bar", "baz"), Optional.of('\t'), Optional.of('\0'), Optional.of('\\'));
-        assertTrinoHiveByteForByte(false, Arrays.asList("f\0\0", "\0bar\0", "baz"), Optional.of('\t'), Optional.of('\0'), Optional.of('\\'));
+        // Hive 4 no longer treats a NUL quote character as "quoting disabled" when reading, so it
+        // recovers all three fields where Hive 3 and Trino stop after the first
+        assertTrinoHiveByteForByte(false, Arrays.asList("f\0\0", "\0bar\0", "baz"), Optional.of('\t'), Optional.of('\0'), Optional.of('\\'), false);
 
         // If escape character is `\0` then escaping is simply disabled, even if this would cause output that does not round trip
-        assertTrinoHiveByteForByte(true, Arrays.asList("f**", "b*r", "b*z"), Optional.of('\t'), Optional.of('*'), Optional.of('#'));
-        assertTrinoHiveByteForByte(false, Arrays.asList("f**", "b*r", "b*z"), Optional.of('\t'), Optional.of('*'), Optional.of('\0'));
+        // Hive 4 interpolates the quote character into a regex without escaping it, so reading back a
+        // file quoted with '*' fails with PatternSyntaxException. It still writes the same bytes as Trino.
+        assertTrinoHiveByteForByte(true, Arrays.asList("f**", "b*r", "b*z"), Optional.of('\t'), Optional.of('*'), Optional.of('#'), false);
+        assertTrinoHiveByteForByte(false, Arrays.asList("f**", "b*r", "b*z"), Optional.of('\t'), Optional.of('*'), Optional.of('\0'), false);
 
         // If both the quote character and escape character are `\0` then quoting and escaping is simply disabled, even if this would cause output that does not round trip
         assertTrinoHiveByteForByte(true, Arrays.asList("foo", "bar", "baz"), Optional.of('\t'), Optional.of('\0'), Optional.of('\0'));
@@ -132,20 +145,23 @@ public class TestCsvFormat
 
         // These cases don't round trip, because Hive uses different default escape characters for serialization and deserialization.
         // For serialization the pipe character is escaped with a quote char, but for deserialization escape character is the backslash character
-        assertTrinoHiveByteForByte(false, Arrays.asList("|", "a", "b"), Optional.empty(), Optional.of('|'), Optional.empty());
+        // the line Hive writes here has an unterminated quoted field, which Hive 4 now rejects on read
+        assertTrinoHiveByteForByte(false, Arrays.asList("|", "a", "b"), Optional.empty(), Optional.of('|'), Optional.empty(), false);
         assertTrinoHiveByteForByte(false, Arrays.asList("|", "a", "|"), Optional.empty(), Optional.of('|'), Optional.empty());
 
         // Hive has strange special handling of the escape character. If the escape character is double quote (char 34)
         // Hive will change the escape character to backslash (char 92).
-        assertLine("*a*|*b\\|b*|*c*", Arrays.asList("a", "b|b", "c"), Optional.of('|'), Optional.of('*'), Optional.of('"'));
+        assertLineHiveQuoteRegexFails("*a*|*b\\|b*|*c*", Arrays.asList("a", "b|b", "c"), Optional.of('|'), Optional.of('*'), Optional.of('"'));
 
-        // Hive does not allow the separator, quote, or escape characters to be the same, but this is checked after the escape character is changed
-        assertInvalidConfig(Optional.of('\\'), Optional.of('*'), Optional.of('"'));
-        assertInvalidConfig(Optional.of('*'), Optional.of('\\'), Optional.of('"'));
+        // Hive does not allow the separator, quote, or escape characters to be the same, but this is checked
+        // after the escape character is changed. Hive 4 interpolates both characters into a regex without
+        // escaping them, so a '*' throws PatternSyntaxException before that check is ever reached.
+        assertInvalidConfig(Optional.of('\\'), Optional.of('*'), Optional.of('"'), "PatternSyntaxException");
+        assertInvalidConfig(Optional.of('*'), Optional.of('\\'), Optional.of('"'), "PatternSyntaxException");
 
         // Since the escape character is swapped, the quote or separator character can be the same as the original escape character
         assertLine("\"a\"|\"b\\\"b\"|\"c\"", Arrays.asList("a", "b\"b", "c"), Optional.of('|'), Optional.of('"'), Optional.of('"'));
-        assertLine("*a*\"*b\\\"b*\"*c*", Arrays.asList("a", "b\"b", "c"), Optional.of('"'), Optional.of('*'), Optional.of('"'));
+        assertLineHiveQuoteRegexFails("*a*\"*b\\\"b*\"*c*", Arrays.asList("a", "b\"b", "c"), Optional.of('"'), Optional.of('*'), Optional.of('"'));
     }
 
     private static void assertLine(boolean shouldRoundTrip, String csvLine, List<String> expectedValues)
@@ -164,6 +180,50 @@ public class TestCsvFormat
         assertTrinoHiveByteForByte(true, expectedValues, Optional.of('_'), Optional.of('|'), Optional.of('~'));
     }
 
+    /**
+     * Same as {@link #assertLine(boolean, String, List)} except that Hive is expected to reject the line.
+     * Hive 4 ships a newer opencsv, which raises CsvMalformedLineException for an unterminated quoted
+     * field rather than silently discarding the rest of the line as Hive 3 did. Trino still reads the
+     * unterminated field as null, so only the Hive parse expectation changes; writing still matches
+     * byte for byte because the values themselves contain no unterminated quote.
+     */
+    private static void assertLineRejectedByHive(String csvLine, List<String> expectedValues)
+            throws Exception
+    {
+        assertHiveLineFails(csvLine, expectedValues.size(), Optional.empty(), Optional.empty(), Optional.empty());
+        assertTrinoLine(csvLine, expectedValues, Optional.empty(), Optional.empty(), Optional.empty());
+        assertTrinoHiveByteForByte(true, expectedValues, Optional.empty(), Optional.empty(), Optional.empty());
+
+        String rewrittenLine = rewriteSpecialChars(csvLine, '_', '|', '~');
+        List<String> rewrittenValues = expectedValues.stream()
+                .map(value -> value == null ? null : rewriteSpecialChars(value, '_', '|', '~'))
+                .collect(Collectors.toList());
+        assertHiveLineFails(rewrittenLine, rewrittenValues.size(), Optional.of('_'), Optional.of('|'), Optional.of('~'));
+        assertTrinoLine(rewrittenLine, rewrittenValues, Optional.of('_'), Optional.of('|'), Optional.of('~'));
+        assertTrinoHiveByteForByte(true, rewrittenValues, Optional.of('_'), Optional.of('|'), Optional.of('~'));
+    }
+
+    /**
+     * Hive 4 interpolates the quote character into a regular expression without escaping it, so a quote
+     * character that is also a regex metacharacter (such as '*') makes its reader throw where Hive 3
+     * read the line. Trino is unaffected, so only the Trino expectation is kept.
+     */
+    private static void assertLineHiveQuoteRegexFails(String csvLine, List<String> expectedValues, Optional<Character> separatorChar, Optional<Character> quoteChar, Optional<Character> escapeChar)
+            throws IOException
+    {
+        assertTrinoLine(csvLine, expectedValues, separatorChar, quoteChar, escapeChar);
+        assertThatThrownBy(() -> readHiveLine(expectedValues.size(), csvLine, separatorChar, quoteChar, escapeChar))
+                .isInstanceOf(SerDeException.class)
+                .hasMessageContaining("Dangling meta character");
+    }
+
+    private static void assertHiveLineFails(String csvLine, int columnCount, Optional<Character> separatorChar, Optional<Character> quoteChar, Optional<Character> escapeChar)
+    {
+        assertThatThrownBy(() -> readHiveLine(columnCount, csvLine, separatorChar, quoteChar, escapeChar))
+                .isInstanceOf(SerDeException.class)
+                .hasMessageContaining("Unterminated quoted field");
+    }
+
     private static String rewriteSpecialChars(String csvLine, char newSeparator, char newQuote, char newEscape)
     {
         return csvLine.replace(',', newSeparator)
@@ -179,6 +239,23 @@ public class TestCsvFormat
             Optional<Character> escapeChar)
             throws SerDeException, IOException
     {
+        assertTrinoHiveByteForByte(shouldRoundTrip, expectedValues, separatorChar, quoteChar, escapeChar, true);
+    }
+
+    /**
+     * @param hiveReadsTheSame false when Hive 4 no longer reads back what it wrote the way Trino does.
+     * Hive 4 ships a newer opencsv, and the two engines diverge on a few inputs; the write comparison
+     * is still made in every case, only the read back comparison is dropped.
+     */
+    private static void assertTrinoHiveByteForByte(
+            boolean shouldRoundTrip,
+            List<String> expectedValues,
+            Optional<Character> separatorChar,
+            Optional<Character> quoteChar,
+            Optional<Character> escapeChar,
+            boolean hiveReadsTheSame)
+            throws SerDeException, IOException
+    {
         String trinoLine = writeTrinoLine(createReadColumns(expectedValues.size()), expectedValues, separatorChar, quoteChar, escapeChar);
         String hiveLine = writeHiveLine(expectedValues, separatorChar, quoteChar, escapeChar);
         assertThat(trinoLine).isEqualTo(hiveLine);
@@ -188,8 +265,10 @@ public class TestCsvFormat
         expectedValues = expectedValues.stream().map(Strings::nullToEmpty).toList();
         List<String> trinoActualValues = readTrinoLine(expectedValues.size(), trinoLine, separatorChar, quoteChar, escapeChar);
 
-        Object hiveActualValues = readHiveLine(expectedValues.size(), trinoLine, separatorChar, quoteChar, escapeChar);
-        assertThat(trinoActualValues).isEqualTo(hiveActualValues);
+        if (hiveReadsTheSame) {
+            Object hiveActualValues = readHiveLine(expectedValues.size(), trinoLine, separatorChar, quoteChar, escapeChar);
+            assertThat(trinoActualValues).isEqualTo(hiveActualValues);
+        }
         if (shouldRoundTrip) {
             assertThat(trinoActualValues).isEqualTo(expectedValues);
         }
@@ -270,9 +349,14 @@ public class TestCsvFormat
 
     private static void assertInvalidConfig(Optional<Character> separatorChar, Optional<Character> quoteChar, Optional<Character> escapeChar)
     {
+        assertInvalidConfig(separatorChar, quoteChar, escapeChar, "java.lang.UnsupportedOperationException: The separator, quote, and escape characters must be different!");
+    }
+
+    private static void assertInvalidConfig(Optional<Character> separatorChar, Optional<Character> quoteChar, Optional<Character> escapeChar, String expectedHiveMessage)
+    {
         assertThatThrownBy(() -> createHiveSerDe(3, separatorChar, quoteChar, escapeChar).deserialize(new Text("")))
                 .isInstanceOf(SerDeException.class)
-                .hasMessage("java.lang.UnsupportedOperationException: The separator, quote, and escape characters must be different!");
+                .hasMessageContaining(expectedHiveMessage);
         assertThatThrownBy(() -> new CsvDeserializerFactory().create(createReadColumns(3), createCsvProperties(separatorChar, quoteChar, escapeChar)))
                 .isInstanceOf(TrinoException.class)
                 .hasMessageMatching("CSV not supported")
@@ -288,7 +372,8 @@ public class TestCsvFormat
 
         Properties schema = new Properties();
         schema.setProperty(META_TABLE_COLUMNS, IntStream.range(0, columnCount).mapToObj(i -> "value_" + i).collect(joining(",")));
-        schema.setProperty(META_TABLE_COLUMN_TYPES, String.join(",", nCopies(columnCount, "STRING")));
+        // Hive 4 parses column type strings case sensitively and only accepts lower case type names
+        schema.setProperty(META_TABLE_COLUMN_TYPES, String.join(",", nCopies(columnCount, "string")));
         schema.putAll(createCsvProperties(separatorChar, quoteChar, escapeChar));
 
         OpenCSVSerde deserializer = new OpenCSVSerde();

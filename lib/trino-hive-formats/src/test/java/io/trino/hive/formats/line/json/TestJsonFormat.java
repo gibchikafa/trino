@@ -690,10 +690,12 @@ public class TestJsonFormat
         assertDate(DATE, "\"1986-01-01 anything is allowed here\"", LocalDate.of(1986, 1, 1).toEpochDay());
 
         assertDate(DATE, "\"1986-01-01\"", LocalDate.of(1986, 1, 1).toEpochDay());
-        assertDate(DATE, "\"1986-01-33\"", LocalDate.of(1986, 2, 2).toEpochDay());
+        // Hive 4 rejects an out of range day instead of rolling it over into the next month
+        assertValueTrinoHiveRejects(DATE, "\"1986-01-33\"", new SqlDate(toIntExact(LocalDate.of(1986, 2, 2).toEpochDay())));
 
-        assertDate(DATE, "\"5881580-07-11\"", Integer.MAX_VALUE);
-        assertDate(DATE, "\"-5877641-06-23\"", Integer.MIN_VALUE);
+        // Hive 4 rejects a date at the top of the int range
+        assertValueTrinoHiveRejects(DATE, "\"5881580-07-11\"", new SqlDate(Integer.MAX_VALUE));
+        assertValueTrinoHiveRejects(DATE, "\"-5877641-06-23\"", new SqlDate(Integer.MIN_VALUE));
 
         // Hive does not enforce size bounds and truncates the results in Date.toEpochDay
         // For Trino we fail as this behavior is error-prone
@@ -746,21 +748,21 @@ public class TestJsonFormat
         // it isn't really possible to test for exact min value, because the sequence gets doesn't transfer through testing framework
         assertValueFails(TIMESTAMP_MICROS, "\"-290308-12-21 19:59:05.224192\"");
 
-        assertValueFails(TIMESTAMP_MICROS, "1");
-        assertValueFails(TIMESTAMP_MICROS, "1.23");
-        assertValueFails(TIMESTAMP_MICROS, "1.2345e2");
-        assertValueFails(TIMESTAMP_MICROS, "1.56");
-        assertValueFails(TIMESTAMP_MICROS, "1.5645e2");
-        assertValueFails(TIMESTAMP_MICROS, "1.5645e300");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_MICROS, "1");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_MICROS, "1.23");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_MICROS, "1.2345e2");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_MICROS, "1.56");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_MICROS, "1.5645e2");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_MICROS, "1.5645e300");
 
-        assertValueFails(TIMESTAMP_MICROS, "true");
-        assertValueFails(TIMESTAMP_MICROS, "false");
-        assertValueFails(TIMESTAMP_MICROS, "\"123\"");
-        assertValueFails(TIMESTAMP_MICROS, "\"string\"");
-        assertValueFails(TIMESTAMP_MICROS, "\"null\"");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_MICROS, "true");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_MICROS, "false");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_MICROS, "\"123\"");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_MICROS, "\"string\"");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_MICROS, "\"null\"");
 
         assertValueFails(TIMESTAMP_MICROS, "[ 42 ]");
-        assertValueFails(TIMESTAMP_MICROS, "{ \"x\" : 42 }");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_MICROS, "{ \"x\" : 42 }");
     }
 
     @Test
@@ -790,16 +792,10 @@ public class TestJsonFormat
                 "\"05/10/2020 12.34.56.123\"",
                 LocalDateTime.of(2020, 5, 10, 12, 34, 56, 123_000_000),
                 "MM/dd/yyyy HH.mm.ss.SSS");
-        assertTimestamp(
-                TIMESTAMP_NANOS,
-                "\"7\"",
-                LocalDateTime.of(1970, 1, 1, 7, 0, 0, 0),
-                "HH");
-        assertTimestamp(
-                TIMESTAMP_NANOS,
-                "\"7\"",
-                LocalDateTime.of(1970, 7, 1, 0, 0, 0, 0),
-                "MM");
+        // Hive 4 no longer fills in the missing components of a single field custom format and returns
+        // null instead; Trino still resolves them against the epoch
+        assertTimestampHiveReturnsNull(TIMESTAMP_NANOS, "\"7\"", LocalDateTime.of(1970, 1, 1, 7, 0, 0, 0), "HH");
+        assertTimestampHiveReturnsNull(TIMESTAMP_NANOS, "\"7\"", LocalDateTime.of(1970, 7, 1, 0, 0, 0, 0), "MM");
         assertTimestamp(
                 TIMESTAMP_NANOS,
                 "\"2020\"",
@@ -844,21 +840,21 @@ public class TestJsonFormat
                         "millis"),
                 true);
 
-        assertValueFails(TIMESTAMP_NANOS, "1");
-        assertValueFails(TIMESTAMP_NANOS, "1.23");
-        assertValueFails(TIMESTAMP_NANOS, "1.2345e2");
-        assertValueFails(TIMESTAMP_NANOS, "1.56");
-        assertValueFails(TIMESTAMP_NANOS, "1.5645e2");
-        assertValueFails(TIMESTAMP_NANOS, "1.5645e300");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_NANOS, "1");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_NANOS, "1.23");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_NANOS, "1.2345e2");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_NANOS, "1.56");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_NANOS, "1.5645e2");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_NANOS, "1.5645e300");
 
-        assertValueFails(TIMESTAMP_NANOS, "true");
-        assertValueFails(TIMESTAMP_NANOS, "false");
-        assertValueFails(TIMESTAMP_NANOS, "\"123\"");
-        assertValueFails(TIMESTAMP_NANOS, "\"string\"");
-        assertValueFails(TIMESTAMP_NANOS, "\"null\"");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_NANOS, "true");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_NANOS, "false");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_NANOS, "\"123\"");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_NANOS, "\"string\"");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_NANOS, "\"null\"");
 
         assertValueFails(TIMESTAMP_NANOS, "[ 42 ]");
-        assertValueFails(TIMESTAMP_NANOS, "{ \"x\" : 42 }");
+        assertValueFailsTrinoHiveReturnsNull(TIMESTAMP_NANOS, "{ \"x\" : 42 }");
     }
 
     private static void assertTimestamp(TimestampType timestampType, String jsonValue, LocalDateTime localDateTime, String... timestampFormats)
@@ -870,6 +866,24 @@ public class TestJsonFormat
                 toSqlTimestamp(timestampType, localDateTime),
                 ImmutableList.copyOf(timestampFormats),
                 timestampFormats.length == 0);
+    }
+
+    @Test
+    public void testPlainHiveJsonSerDeStillCoercesSilently()
+            throws Exception
+    {
+        // Canary for TEST_AGAINST_PLAIN_HIVE_JSON_SERDE. Hive 3 threw for a value that did not fit the
+        // column type; Hive 4's plain JsonSerDe wraps it instead. If this starts failing the serde has
+        // been changed back and the plain variant can be compared against again.
+        assertThat(TEST_AGAINST_PLAIN_HIVE_JSON_SERDE).isFalse();
+
+        List<Column> columns = ImmutableList.of(new Column("test", BIGINT, 33));
+        Object value = readHiveLine(columns, "{\"test\" : 9223372036854775808}", ImmutableList.of(), false).get(0);
+        assertThat(value).isEqualTo(Long.MIN_VALUE);
+
+        // the hcatalog serde still rejects it, which is why it remains the reference
+        assertThatThrownBy(() -> readHiveLine(columns, "{\"test\" : 9223372036854775808}", ImmutableList.of(), true))
+                .isInstanceOf(Exception.class);
     }
 
     private static void assertValue(Type type, String jsonValue, Object expectedValue)
@@ -889,6 +903,24 @@ public class TestJsonFormat
     {
         assertValueHive(type, jsonValue, expectedValue, timestampFormats, testMapKey);
         assertValueTrino(type, jsonValue, expectedValue, timestampFormats, testMapKey);
+    }
+
+    /**
+     * Hive 4 rejects the value outright where Hive 3 parsed it, in both the hcatalog and the plain
+     * serde. Trino is unchanged, so only the Trino expectation is kept.
+     */
+    private static void assertValueTrinoHiveRejects(Type type, String jsonValue, Object expectedValue)
+            throws Exception
+    {
+        // Trino reads the value, and reads back what it writes. Hive is not asked to read the line at
+        // all, because it can not parse the value in either direction.
+        List<Column> columns = ImmutableList.of(new Column("test", type, 33));
+        assertColumnValueEquals(type, readTrinoLine("{\"test\" : " + jsonValue + "}", columns, ImmutableList.of()).get(0), expectedValue);
+        String trinoLine = writeTrinoValue(type, expectedValue);
+        assertColumnValueEquals(type, readTrinoLine(trinoLine, columns, ImmutableList.of()).get(0), expectedValue);
+        for (boolean hcatalog : HIVE_JSON_SERDE_VARIANTS) {
+            internalAssertValueFailsHive(type, jsonValue, hcatalog);
+        }
     }
 
     private static void assertValueTrino(Type type, String jsonValue, Object expectedValue)
@@ -943,7 +975,7 @@ public class TestJsonFormat
         assertColumnValueEquals(type, actualValue, expectedValue);
 
         // verify Hive can read back the Trino json
-        for (boolean hcatalog : ImmutableList.of(true, false)) {
+        for (boolean hcatalog : HIVE_JSON_SERDE_VARIANTS) {
             actualValue = readHiveLine(columns, trinoLine, ImmutableList.of(), hcatalog).get(0);
             assertColumnValueEquals(type, actualValue, expectedValue);
         }
@@ -972,10 +1004,25 @@ public class TestJsonFormat
         return sliceOutput.slice().toStringUtf8();
     }
 
+    /**
+     * Hive 4 rewrote the coercion rules in the plain {@code org.apache.hadoop.hive.serde2.JsonSerDe}:
+     * where Hive 3 threw on input that did not fit the column type, it now coerces silently. Integers
+     * overflow and wrap, non-numeric strings and booleans become 0/1, out of range decimals and
+     * unparseable timestamps become null, and text types render numbers in scientific notation. That is
+     * roughly 150 inputs in this class, all of them in that one serde. Trino keeps the Hive 3 behaviour,
+     * so the plain serde is no longer a useful reference and only the hcatalog serde is compared against.
+     * testPlainHiveJsonSerDeStillCoercesSilently is the canary for re-enabling this.
+     */
+    private static final boolean TEST_AGAINST_PLAIN_HIVE_JSON_SERDE = false;
+
+    private static final List<Boolean> HIVE_JSON_SERDE_VARIANTS = TEST_AGAINST_PLAIN_HIVE_JSON_SERDE
+            ? ImmutableList.of(true, false)
+            : ImmutableList.of(true);
+
     private static void assertValueHive(Type type, String jsonValue, Object expectedValue, List<String> timestampFormats, boolean testMapKey)
             throws SerDeException
     {
-        for (boolean hcatalog : ImmutableList.of(true, false)) {
+        for (boolean hcatalog : HIVE_JSON_SERDE_VARIANTS) {
             // The non-hcatalog version of JsonSerDe has a broken implementation of ordinal fields that always fails
             if (hcatalog || !jsonValue.contains("\"_col")) {
                 internalAssertValueHive(type, jsonValue, expectedValue, timestampFormats, hcatalog);
@@ -1039,16 +1086,43 @@ public class TestJsonFormat
                 .collect(joining(",")));
         schema.putAll(createJsonProperties(timestampFormats));
 
-        Deserializer deserializer;
+        AbstractSerDe deserializer;
         if (hcatalog) {
             deserializer = new org.apache.hive.hcatalog.data.JsonSerDe();
         }
         else {
             deserializer = new org.apache.hadoop.hive.serde2.JsonSerDe();
         }
-        ((AbstractSerDe) deserializer).initialize(configuration, schema, null);
+        deserializer.initialize(configuration, schema, null);
         configuration.set(SERIALIZATION_LIB, deserializer.getClass().getName());
         return deserializer;
+    }
+
+    /**
+     * Hive 4 returns null for a value it can not interpret as a timestamp, where Hive 3 threw. Trino
+     * still rejects the value.
+     */
+    private static void assertValueFailsTrinoHiveReturnsNull(Type type, String jsonValue)
+            throws Exception
+    {
+        assertValueFailsTrino(type, jsonValue);
+        for (boolean hcatalog : HIVE_JSON_SERDE_VARIANTS) {
+            internalAssertValueHive(type, jsonValue, null, ImmutableList.of(), hcatalog);
+        }
+    }
+
+    /**
+     * A custom timestamp format that names only some of the fields. Hive 4 returns null rather than
+     * defaulting the missing components, so only the Trino expectation is kept.
+     */
+    private static void assertTimestampHiveReturnsNull(TimestampType timestampType, String jsonValue, LocalDateTime localDateTime, String timestampFormat)
+            throws Exception
+    {
+        List<String> formats = ImmutableList.of(timestampFormat);
+        assertValueTrino(timestampType, jsonValue, toSqlTimestamp(timestampType, localDateTime), formats, true);
+        for (boolean hcatalog : HIVE_JSON_SERDE_VARIANTS) {
+            internalAssertValueHive(timestampType, jsonValue, null, formats, hcatalog);
+        }
     }
 
     private static void assertValueFails(Type type, String jsonValue)
@@ -1087,7 +1161,7 @@ public class TestJsonFormat
 
     private static void assertValueFailsHive(Type type, String jsonValue, boolean testMapKey)
     {
-        for (boolean hcatalog : ImmutableList.of(true, false)) {
+        for (boolean hcatalog : HIVE_JSON_SERDE_VARIANTS) {
             internalAssertValueFailsHive(type, jsonValue, hcatalog);
             if (testMapKey && isScalarType(type)) {
                 internalAssertValueFailsHive(toMapKeyType(type), toMapKeyJson(jsonValue), hcatalog);

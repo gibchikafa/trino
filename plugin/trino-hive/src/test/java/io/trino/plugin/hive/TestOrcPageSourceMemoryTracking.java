@@ -64,7 +64,6 @@ import org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat;
 import org.apache.hadoop.hive.ql.io.orc.OrcSerde;
 import org.apache.hadoop.hive.ql.io.orc.Writer;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
-import org.apache.hadoop.hive.serde2.Serializer;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.SettableStructObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StructField;
@@ -645,7 +644,7 @@ public class TestOrcPageSourceMemoryTracking
 
     private static FileSplit createTestFile(
             String filePath,
-            Serializer serializer,
+            AbstractSerDe serializer,
             List<TestColumn> testColumns,
             int numRows,
             int stripeRows)
@@ -669,7 +668,7 @@ public class TestOrcPageSourceMemoryTracking
                         .map(TestColumn::getType)
                         .collect(Collectors.joining(",")));
 
-        ((AbstractSerDe) serializer).initialize(CONFIGURATION, tableProperties, null);
+        serializer.initialize(CONFIGURATION, tableProperties, null);
         RecordWriter recordWriter = createRecordWriter(new Path(filePath), CONFIGURATION);
 
         try {

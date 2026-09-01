@@ -83,6 +83,18 @@
             <groupId>io.hops.hudi</groupId>
             <artifactId>hudi-io</artifactId>
             <version>${dep.hudi.version}</version>
+            <exclusions>
+                <!-- Only HoodieArrowAllocator needs Arrow and nothing on the Trino read path calls it -->
+                <exclusion>
+                    <groupId>org.apache.arrow</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <!-- Compile-time annotation processor, must not be packaged into the plugin -->
+                <exclusion>
+                    <groupId>org.projectlombok</groupId>
+                    <artifactId>lombok</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>

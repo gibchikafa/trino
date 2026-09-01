@@ -90,7 +90,6 @@ import org.apache.hadoop.hive.common.type.Timestamp;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.io.HiveOutputFormat;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
-import org.apache.hadoop.hive.serde2.Serializer;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.SettableStructObjectInspector;
@@ -1544,7 +1543,7 @@ public final class TestHiveFileFormats
             throws Exception
     {
         HiveOutputFormat<?, ?> outputFormat = newInstance(storageFormat.getOutputFormat(), HiveOutputFormat.class);
-        Serializer serializer = newInstance(storageFormat.getSerde(), Serializer.class);
+        AbstractSerDe serializer = newInstance(storageFormat.getSerde(), AbstractSerDe.class);
 
         // filter out partition keys, which are not written to the file
         testColumns = testColumns.stream()
@@ -1554,7 +1553,7 @@ public final class TestHiveFileFormats
         Properties tableProperties = new Properties();
         tableProperties.setProperty(LIST_COLUMNS, testColumns.stream().map(TestColumn::name).collect(Collectors.joining(",")));
         tableProperties.setProperty(LIST_COLUMN_TYPES, testColumns.stream().map(testColumn -> toHiveType(testColumn.type()).toString()).collect(Collectors.joining(",")));
-        ((AbstractSerDe) serializer).initialize(new Configuration(false), tableProperties, null);
+        serializer.initialize(new Configuration(false), tableProperties, null);
 
         JobConf jobConf = new JobConf(false);
         configureCompression(jobConf, compressionCodec);
@@ -1570,7 +1569,7 @@ public final class TestHiveFileFormats
                     tableProperties,
                     () -> {});
 
-            ((AbstractSerDe) serializer).initialize(new Configuration(false), tableProperties, null);
+            serializer.initialize(new Configuration(false), tableProperties, null);
 
             SettableStructObjectInspector objectInspector = getStandardStructObjectInspector(
                     testColumns.stream()

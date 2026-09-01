@@ -19,7 +19,9 @@ import io.trino.plugin.hive.util.FileSystemTesting.MockPath;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.ValidCompactorWriteIdList;
+import org.apache.hadoop.hive.common.ValidReadTxnList;
 import org.apache.hadoop.hive.common.ValidReaderWriteIdList;
+import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.common.ValidWriteIdList;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.io.AcidDirectory;
@@ -146,8 +148,9 @@ public class TestHiveAcidUtils
         assertThat(dir.getBaseDirectory().toString()).isEqualTo("mock:/tbl/part1/base_49");
         List<Path> obsolete = dir.getObsolete();
         assertThat(obsolete).hasSize(5);
-        assertThat(obsolete.get(0).toString()).isEqualTo("mock:/tbl/part1/base_10");
-        assertThat(obsolete.get(1).toString()).isEqualTo("mock:/tbl/part1/base_5");
+        // Hive 4 returns obsolete base directories in ascending write id order (Hive 3 was descending)
+        assertThat(obsolete.get(0).toString()).isEqualTo("mock:/tbl/part1/base_5");
+        assertThat(obsolete.get(1).toString()).isEqualTo("mock:/tbl/part1/base_10");
         assertThat(obsolete.get(2).toString()).isEqualTo("mock:/tbl/part1/delta_025_030");
         assertThat(obsolete.get(3).toString()).isEqualTo("mock:/tbl/part1/delta_025_025");
         assertThat(obsolete.get(4).toString()).isEqualTo("mock:/tbl/part1/delta_029_029");
@@ -332,8 +335,9 @@ public class TestHiveAcidUtils
         assertThat(dir.getBaseDirectory().toString()).isEqualTo("mock:/tbl/part1/base_49");
         List<Path> obsolete = dir.getObsolete();
         assertThat(obsolete).hasSize(7);
-        assertThat(obsolete.get(0).toString()).isEqualTo("mock:/tbl/part1/base_10");
-        assertThat(obsolete.get(1).toString()).isEqualTo("mock:/tbl/part1/base_5");
+        // Hive 4 returns obsolete base directories in ascending write id order (Hive 3 was descending)
+        assertThat(obsolete.get(0).toString()).isEqualTo("mock:/tbl/part1/base_5");
+        assertThat(obsolete.get(1).toString()).isEqualTo("mock:/tbl/part1/base_10");
         assertThat(obsolete.get(2).toString()).isEqualTo("mock:/tbl/part1/delete_delta_025_030");
         assertThat(obsolete.get(3).toString()).isEqualTo("mock:/tbl/part1/delta_025_030");
         assertThat(obsolete.get(4).toString()).isEqualTo("mock:/tbl/part1/delta_025_025");
@@ -474,16 +478,27 @@ public class TestHiveAcidUtils
         AcidDirectory dir = getAcidState(part, conf, ValidReaderWriteIdList.fromValue("tbl:100:" + Long.MAX_VALUE + ":"));
         assertThat(dir.getBaseDirectory().toString()).isEqualTo("mock:/tbl/part1/base_1");
         List<Path> obsolete = dir.getObsolete();
-        assertThat(obsolete).isEmpty();
+        // Nested delta/delete_delta directories are still skipped, but Hive 4 reports a base nested
+        // inside the selected base as obsolete instead of ignoring it
+        assertThat(obsolete).hasSize(1);
+        assertThat(obsolete.get(0).toString()).isEqualTo("mock:/tbl/part1/base_1/base_1");
+        // Hive 4 builds the directory state from a recursive listing, so nested delta and delete_delta
+        // directories are surfaced as current directories instead of being skipped as they were in Hive 3
         List<AcidUtils.ParsedDelta> delts = dir.getCurrentDirectories();
-        assertThat(delts).hasSize(2);
+        assertThat(delts).hasSize(4);
         assertThat(delts.get(0).getPath().toString()).isEqualTo("mock:/tbl/part1/delta_025_025");
-        assertThat(delts.get(1).getPath().toString()).isEqualTo("mock:/tbl/part1/delete_delta_029_029");
+        assertThat(delts.get(1).getPath().toString()).isEqualTo("mock:/tbl/part1/delta_025_025/delta_025_025");
+        assertThat(delts.get(2).getPath().toString()).isEqualTo("mock:/tbl/part1/delete_delta_029_029");
+        assertThat(delts.get(3).getPath().toString()).isEqualTo("mock:/tbl/part1/delete_delta_029_029/delete_delta_029_029");
     }
 
     private static AcidDirectory getAcidState(Path path, Configuration conf, ValidWriteIdList writeIdList)
             throws IOException
     {
+        // Hive 4 screens every directory through isDirUsable, which reads a ValidTxnList out of the
+        // configuration and rejects the directory outright when it is absent. These tests cover write id
+        // selection rather than transaction visibility, so every transaction is treated as valid.
+        conf.set(ValidTxnList.VALID_TXNS_KEY, new ValidReadTxnList().writeToString());
         return AcidUtils.getAcidState(path.getFileSystem(conf), path, conf, writeIdList, Ref.from(false), false);
     }
 }

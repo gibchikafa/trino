@@ -131,6 +131,16 @@ public class TestOpenxJsonFormat
         logging.setLevel(JsonSerDe.class.getName(), Level.ERROR);
     }
 
+    /**
+     * io.starburst.openx.data:json-serde 1.3.9-e.12 is compiled against Hive 3. It calls
+     * StructTypeInfo.getAllStructFieldNames() and getAllStructFieldTypeInfos(), whose return type
+     * changed from ArrayList to List in Hive 4, so every use fails with NoSuchMethodError. The serde
+     * is source compatible - only the compiled descriptors differ - so a build against Hive 4 fixes
+     * it, and 1.3.9-e.12 is currently the newest release. Until such a build exists these tests
+     * exercise only the Trino implementation; testHiveSerDeIsStillIncompatible is the canary.
+     */
+    private static final boolean TEST_AGAINST_HIVE_SERDE = false;
+
     private static final TypeOperators TYPE_OPERATORS = new TypeOperators();
 
     private static final DecimalType SHORT_DECIMAL = createDecimalType(MAX_SHORT_PRECISION, 2);
@@ -691,6 +701,10 @@ public class TestOpenxJsonFormat
         assertValueTrino(type, jsonValue, null, DEFAULT_OPEN_X_JSON_OPTIONS, true);
         assertValueTrino(type, "\"" + jsonValue + "\"", null, DEFAULT_OPEN_X_JSON_OPTIONS, true);
 
+        if (!TEST_AGAINST_HIVE_SERDE) {
+            return;
+        }
+
         Object hiveActualValue = readHiveValue(type, jsonValue, DEFAULT_OPEN_X_JSON_OPTIONS);
         if (!hiveActualValue.equals(hiveExpectedValue)) {
             // Hive reads values using double which will lose precision, so Integer.MAX_VALUE + 1 round trips
@@ -1198,6 +1212,20 @@ public class TestOpenxJsonFormat
         return toIntExact((nanos / nanoRescale) * nanoRescale);
     }
 
+    @Test
+    public void testHiveSerDeIsStillIncompatible()
+    {
+        // Canary for TEST_AGAINST_HIVE_SERDE. When a json-serde built against Hive 4 is published this
+        // test starts failing: at that point drop the flag and the guards that read it, and the Hive
+        // reference comparison in this class comes back.
+        assertThat(TEST_AGAINST_HIVE_SERDE).isFalse();
+        Properties schema = new Properties();
+        schema.putAll(createOpenXJsonSerDeProperties(ImmutableList.of(new Column("test", BIGINT, 0)), DEFAULT_OPEN_X_JSON_OPTIONS));
+        assertThatThrownBy(() -> new JsonSerDe().initialize(new Configuration(false), schema))
+                .isInstanceOf(NoSuchMethodError.class)
+                .hasMessageContaining("getAllStructFieldNames");
+    }
+
     private static void assertValue(Type type, String jsonValue, Object expectedValue)
     {
         assertValue(type, jsonValue, expectedValue, true);
@@ -1233,7 +1261,9 @@ public class TestOpenxJsonFormat
     private static void assertValueTrinoOnly(Type type, String jsonValue, Object expectedValue, OpenXJsonOptions defaultOpenXJsonOptions, boolean readOnly)
     {
         assertValueTrino(type, jsonValue, expectedValue, defaultOpenXJsonOptions, true, readOnly);
-        assertThatThrownBy(() -> assertValueHive(type, jsonValue, expectedValue, defaultOpenXJsonOptions, true));
+        if (TEST_AGAINST_HIVE_SERDE) {
+            assertThatThrownBy(() -> assertValueHive(type, jsonValue, expectedValue, defaultOpenXJsonOptions, true));
+        }
     }
 
     private static void assertValueTrino(Type type, String jsonValue, Object expectedValue, OpenXJsonOptions options, boolean testMapKey)
@@ -1297,6 +1327,10 @@ public class TestOpenxJsonFormat
         List<Object> trinoValues = readTrinoLine(columns, trinoLine, DEFAULT_OPEN_X_JSON_OPTIONS);
         assertColumnValuesEquals(columns, trinoValues, expectedValues);
 
+        if (!TEST_AGAINST_HIVE_SERDE) {
+            return;
+        }
+
         // verify that Hive can read the value back
         List<Object> hiveValues;
         try {
@@ -1335,8 +1369,10 @@ public class TestOpenxJsonFormat
     private static void assertExactLine(List<Column> columns, List<Object> values, String expectedLine, OpenXJsonOptions options)
     {
         // verify Hive produces the exact line
-        String hiveLine = writeHiveLine(columns, values, options);
-        assertThat(hiveLine).isEqualTo(expectedLine);
+        if (TEST_AGAINST_HIVE_SERDE) {
+            String hiveLine = writeHiveLine(columns, values, options);
+            assertThat(hiveLine).isEqualTo(expectedLine);
+        }
 
         // verify Trino produces the exact line
         String trinoLine = writeTrinoLine(columns, values, options);
@@ -1389,12 +1425,18 @@ public class TestOpenxJsonFormat
 
     private static void internalAssertValueHive(Type type, String jsonValue, Object expectedValue, OpenXJsonOptions options)
     {
+        if (!TEST_AGAINST_HIVE_SERDE) {
+            return;
+        }
         Object actualValue = readHiveValue(type, jsonValue, options);
         assertColumnValueEquals(type, actualValue, expectedValue);
     }
 
     private static void internalAssertLineHive(List<Column> columns, String jsonLine, List<Object> expectedValues, OpenXJsonOptions options)
     {
+        if (!TEST_AGAINST_HIVE_SERDE) {
+            return;
+        }
         List<Object> actualValues = readHiveLine(columns, jsonLine, options);
         assertColumnValuesEquals(columns, actualValues, expectedValues);
     }
@@ -1584,6 +1626,9 @@ public class TestOpenxJsonFormat
 
     private static void internalAssertValueFailsHive(Type type, String jsonValue, OpenXJsonOptions options)
     {
+        if (!TEST_AGAINST_HIVE_SERDE) {
+            return;
+        }
         List<Column> columns = ImmutableList.of(new Column("test", type, 0));
         String jsonLine = "{\"test\" : " + jsonValue + "}";
         assertLineFailsHive(columns, jsonLine, options);
@@ -1591,6 +1636,9 @@ public class TestOpenxJsonFormat
 
     private static void assertLineFailsHive(List<Column> columns, String jsonLine, OpenXJsonOptions options)
     {
+        if (!TEST_AGAINST_HIVE_SERDE) {
+            return;
+        }
         assertThatThrownBy(() -> {
             Configuration configuration = new Configuration(false);
 
