@@ -34,12 +34,20 @@ public class TestTxnUtils
         aborted.set(2, 4);
         ByteBuffer abortedBits = ByteBuffer.wrap(aborted.toByteArray());
 
-        long currentTxn = 7;
+        // Hive 4 asserts currentTxn <= txnHighWaterMark, so currentTxn must not exceed the high water mark
+        long currentTxn = 6;
         var trinoResponse = new GetOpenTxnsResponse(6, List.of(1L, 2L, 3L), abortedBits);
         String trinoValue = createValidReadTxnList(trinoResponse, currentTxn);
 
+        var hiveResponse = new org.apache.hadoop.hive.metastore.api.GetOpenTxnsResponse(
+                trinoResponse.getTxnHighWaterMark(),
+                trinoResponse.getOpenTxns(),
+                trinoResponse.bufferForAbortedBits());
+        String hiveValue = org.apache.hadoop.hive.metastore.txn.TxnCommonUtils.createValidReadTxnList(hiveResponse, currentTxn).toString();
+
         assertThat(trinoValue)
-                .isEqualTo("6:1:1,2,0:3");
+                .isEqualTo(hiveValue)
+                .isEqualTo("6:1:1,2:3");
     }
 
     @Test
@@ -56,8 +64,14 @@ public class TestTxnUtils
         var trinoIds = List.of(table1, table2);
         String trinoValue = createValidTxnWriteIdList(currentTxn, trinoIds);
 
+        var hiveIds = trinoIds.stream()
+                .map(TestTxnUtils::toHiveTableValidWriteIds)
+                .toList();
+        String hiveValue = org.apache.hadoop.hive.metastore.txn.TxnCommonUtils.createValidTxnWriteIdList(currentTxn, hiveIds).toString();
+
         // the expected result depends on HashMap iteration order (matches Hive behavior)
         assertThat(trinoValue)
+                .isEqualTo(hiveValue)
                 .isEqualTo("7$foo.bar:5:2:3,4:$abc.xyz:6:9223372036854775807:1,2:3");
     }
 
@@ -71,7 +85,24 @@ public class TestTxnUtils
         var trinoIds = new TableValidWriteIds("abc.xyz", 6, List.of(1L, 2L, 3L), abortedBits);
         String trinoValue = TxnUtils.createValidWriteIdList(trinoIds);
 
+        var hiveIds = toHiveTableValidWriteIds(trinoIds);
+        String hiveValue = org.apache.hadoop.hive.metastore.txn.TxnCommonUtils.createValidReaderWriteIdList(hiveIds).toString();
+
         assertThat(trinoValue)
+                .isEqualTo(hiveValue)
                 .isEqualTo("abc.xyz:6:9223372036854775807:1,2:3");
+    }
+
+    private static org.apache.hadoop.hive.metastore.api.TableValidWriteIds toHiveTableValidWriteIds(TableValidWriteIds ids)
+    {
+        var result = new org.apache.hadoop.hive.metastore.api.TableValidWriteIds(
+                ids.getFullTableName(),
+                ids.getWriteIdHighWaterMark(),
+                ids.getInvalidWriteIds(),
+                ids.bufferForAbortedBits());
+        if (ids.isSetMinOpenWriteId()) {
+            result.setMinOpenWriteId(ids.getMinOpenWriteId());
+        }
+        return result;
     }
 }

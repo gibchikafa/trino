@@ -35,8 +35,11 @@ public final class TxnUtils
     public static String createValidReadTxnList(GetOpenTxnsResponse txns, long currentTxn)
     {
         List<Long> openTxns = txns.getOpenTxns();
-        int sizeToHwm = (currentTxn > 0) ? binarySearch(openTxns, currentTxn) : openTxns.size();
-        long[] exceptions = new long[abs(sizeToHwm)];
+        // binarySearch returns -(insertionPoint) - 1 when currentTxn is not an open transaction, which
+        // overshoots by one once currentTxn sorts after every open transaction. Clamp to the list size,
+        // otherwise the trailing unwritten slot is emitted as a phantom open transaction 0.
+        int sizeToHwm = (currentTxn > 0) ? min(abs(binarySearch(openTxns, currentTxn)), openTxns.size()) : openTxns.size();
+        long[] exceptions = new long[sizeToHwm];
         BitSet inAbortedBits = BitSet.valueOf(txns.getAbortedBits());
         BitSet outAbortedBits = new BitSet();
         long minOpenTxnId = Long.MAX_VALUE;
